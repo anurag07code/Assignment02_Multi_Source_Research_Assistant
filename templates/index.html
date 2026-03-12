@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Research Assistant</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 900px; margin: 40px auto; padding: 20px; background-color: #f4f7f6; color: #333; }
+        .box { border: none; padding: 25px; border-radius: 12px; margin-bottom: 25px; background: white; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        h1 { color: #2c3e50; text-align: center; }
+        #response { white-space: pre-wrap; background: #2d3436; color: #dfe6e9; padding: 20px; border-radius: 8px; min-height: 100px; font-family: 'Courier New', Courier, monospace; }
+        button { cursor: pointer; padding: 12px 24px; background: #0984e3; color: white; border: none; border-radius: 6px; font-weight: bold; transition: background 0.3s; }
+        button:hover { background: #74b9ff; }
+        button:disabled { background: #b2bec3; cursor: not-allowed; }
+        input[type="text"] { border: 2px solid #dfe6e9; border-radius: 6px; padding: 10px; margin-right: 10px; }
+        .status-msg { font-weight: bold; margin-top: 10px; color: #d63031; }
+    </style>
+</head>
+<body>
+    <h1>🤖 Intelligent Research Assistant</h1>
+    
+    <div class="box">
+        <h3>1. Setup Knowledge Base</h3>
+        <p>Step A: Select your PDF, CSV, and MD files.</p>
+        <input type="file" id="fileInput" multiple>
+        <button onclick="uploadFiles()">Upload Files</button>
+        
+        <p>Step B: Once uploaded, click below to build the AI Index.</p>
+        <button id="processBtn" onclick="processDocuments()" disabled style="background: #00b894;">Build Knowledge Base</button>
+        <div id="uploadStatus" class="status-msg"></div>
+    </div>
+
+    <div class="box">
+        <h3>2. Agentic Search</h3>
+        <input type="text" id="queryInput" style="width: 75%;" placeholder="e.g., 'Summarize the technical doc' or 'Compare metrics'">
+        <button onclick="askQuestion()">Ask Agent</button>
+    </div>
+
+    <div class="box">
+        <h3>AI Response:</h3>
+        <div id="response">Waiting for query...</div>
+    </div>
+
+    <script>
+        // Step 1: Upload files to the 'uploads' folder
+        async function uploadFiles() {
+            const files = document.getElementById('fileInput').files;
+            if (files.length === 0) return alert("Please select files first");
+
+            const formData = new FormData();
+            for (let f of files) formData.append('files', f);
+            
+            document.getElementById('uploadStatus').innerText = "Uploading files...";
+            const res = await fetch('/upload', { method: 'POST', body: formData });
+            const data = await res.json();
+            
+            document.getElementById('uploadStatus').innerText = data.message;
+            document.getElementById('uploadStatus').style.color = "#0984e3";
+            document.getElementById('processBtn').disabled = false; // Enable the next step
+        }
+
+        // Step 2: Trigger the LangChain ingestion/chunking
+        async function processDocuments() {
+            document.getElementById('uploadStatus').innerText = "🔨 Building Vector DB... this may take a minute.";
+            const res = await fetch('/process', { method: 'POST' });
+            const data = await res.json();
+            document.getElementById('uploadStatus').innerText = data.message;
+            document.getElementById('uploadStatus').style.color = "#00b894";
+        }
+
+        // Step 3: Send query to the Agent Dispatcher
+        async function askQuestion() {
+            const query = document.getElementById('queryInput').value;
+            if (!query) return alert("Enter a question!");
+
+            document.getElementById('response').innerText = "🤖 Thinking (Agent Dispatcher Routing)...";
+            const res = await fetch('/ask', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ query })
+            });
+            const data = await res.json();
+            document.getElementById('response').innerText = data.answer;
+        }
+    </script>
+</body>
+</html>

@@ -1,84 +1,472 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>Research Assistant</title>
-    <style>
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 900px; margin: 40px auto; padding: 20px; background-color: #f4f7f6; color: #333; }
-        .box { border: none; padding: 25px; border-radius: 12px; margin-bottom: 25px; background: white; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
-        h1 { color: #2c3e50; text-align: center; }
-        #response { white-space: pre-wrap; background: #2d3436; color: #dfe6e9; padding: 20px; border-radius: 8px; min-height: 100px; font-family: 'Courier New', Courier, monospace; }
-        button { cursor: pointer; padding: 12px 24px; background: #0984e3; color: white; border: none; border-radius: 6px; font-weight: bold; transition: background 0.3s; }
-        button:hover { background: #74b9ff; }
-        button:disabled { background: #b2bec3; cursor: not-allowed; }
-        input[type="text"] { border: 2px solid #dfe6e9; border-radius: 6px; padding: 10px; margin-right: 10px; }
-        .status-msg { font-weight: bold; margin-top: 10px; color: #d63031; }
-    </style>
+    <meta charset="UTF-8" />
+    <title>Intelligent Research Dashboard</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 </head>
-<body>
-    <h1>🤖 Intelligent Research Assistant</h1>
-    
-    <div class="box">
-        <h3>1. Setup Knowledge Base</h3>
-        <p>Step A: Select your PDF, CSV, and MD files.</p>
-        <input type="file" id="fileInput" multiple>
-        <button onclick="uploadFiles()">Upload Files</button>
-        
-        <p>Step B: Once uploaded, click below to build the AI Index.</p>
-        <button id="processBtn" onclick="processDocuments()" disabled style="background: #00b894;">Build Knowledge Base</button>
-        <div id="uploadStatus" class="status-msg"></div>
-    </div>
+<body class="theme-light">
+    <div class="app-shell">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="brand">
+                <div class="brand-icon">IR</div>
+                <div>
+                    <div class="brand-text-title">Insight Research</div>
+                    <div class="brand-text-sub">Agentic Knowledge Console</div>
+                </div>
+            </div>
 
-    <div class="box">
-        <h3>2. Agentic Search</h3>
-        <input type="text" id="queryInput" style="width: 75%;" placeholder="e.g., 'Summarize the technical doc' or 'Compare metrics'">
-        <button onclick="askQuestion()">Ask Agent</button>
-    </div>
+            <!-- Workspace setup inside sidebar (clean upload + build) -->
+            <section class="panel" style="margin-top: 12px;">
+                <header class="panel-header">
+                    <div class="panel-header-left">
+                        <div class="panel-title">Workspace Setup</div>
+                        <div class="panel-subtitle">Upload documents and build your vector database.</div>
+                    </div>
+                </header>
 
-    <div class="box">
-        <h3>AI Response:</h3>
-        <div id="response">Waiting for query...</div>
+                <div class="panel-body">
+                    <div class="upload-dropzone"
+                         id="uploadDropzone"
+                         onclick="document.getElementById('fileInput').click();"
+                         ondragover="handleDragOver(event)"
+                         ondrop="handleDrop(event)">
+                        <div class="upload-icon">⬆️</div>
+                        <div class="upload-title">Drop documents here or click to browse</div>
+                        <div class="upload-subtitle">PDF, CSV/JSON, Markdown</div>
+                        <input type="file" id="fileInput" multiple style="display:none" onchange="updateFileList()" />
+                    </div>
+                    <div id="fileList" class="file-list"></div>
+
+                    <div class="upload-actions">
+                        <button type="button" onclick="uploadFiles()">
+                            Upload documents
+                        </button>
+                        <button id="processBtn" type="button" onclick="processDocuments()" disabled>
+                            Build vector DB
+                        </button>
+                    </div>
+
+                    <div id="buildProgress" class="progress-wrapper" style="display:none;">
+                        <div class="progress-label" id="buildProgressLabel">Building vector database… 0%</div>
+                        <div class="progress-bar">
+                            <div class="progress-bar-fill" id="buildProgressFill" style="width:0%;"></div>
+                        </div>
+                        <div id="vectorAnim" class="vector-anim" style="display:none;">
+                            <div class="vector-anim-icon"></div>
+                            <span>Vector DB ready for chat</span>
+                        </div>
+                    </div>
+
+                    <div id="uploadStatus" class="status-msg"></div>
+                    <div id="chatHint" class="status-msg status-ok" style="display:none; margin-top:4px;">
+                        Vector DB ready — start chatting in the console on the right.
+                    </div>
+                </div>
+            </section>
+        </aside>
+
+        <!-- Main -->
+        <main class="main">
+            <!-- Top bar -->
+            <header class="top-bar">
+                <div class="top-bar-left">
+                    <div class="top-greeting">Welcome back, Researcher</div>
+                    <div class="top-title">Intelligent Research Assistant</div>
+                </div>
+
+                <div class="top-bar-right">
+                    <div class="theme-toggle" id="themeToggle">
+                        <span class="theme-toggle-label">Theme</span>
+                        <div class="toggle-pill">
+                            <div class="toggle-thumb" id="toggleThumb">☀️</div>
+                        </div>
+                    </div>
+                    <div class="avatar-circle">IR</div>
+                </div>
+            </header>
+
+            <!-- Main panels -->
+            <section class="panels-grid">
+                <!-- Response console -->
+                <section class="panel">
+                    <header class="panel-header">
+                        <div class="panel-header-left">
+                            <div class="panel-title">AI Response Console</div>
+                            <div class="panel-subtitle">Streaming output grounded in your uploaded research corpus.</div>
+                        </div>
+                    </header>
+
+                    <div class="response-shell">
+                        <div class="response-header">
+                            <span>Agent Dispatcher</span>
+                            <span class="response-chip">
+                                <span id="activeToolLabel">Waiting</span>
+                            </span>
+                        </div>
+                        <div id="response" class="response-body">
+                            <div class="chat-empty">Upload and process documents, then start asking questions.</div>
+                        </div>
+                        <div class="chat-input-row">
+                            <input
+                                type="text"
+                                id="queryInput"
+                                class="chat-input"
+                                placeholder="Ask a question about your PDFs, CSV/JSON, or Markdown…"
+                            />
+                            <button type="button" onclick="askQuestion()">
+                                <span class="btn-icon">🤖</span>
+                                Ask Agent
+                            </button>
+                        </div>
+                        <div class="tag-row">
+                            <span class="tag">SUMMARY mode</span>
+                            <span class="tag">COMPARATIVE mode</span>
+                            <span class="tag">QA mode</span>
+                        </div>
+                    </div>
+                </section>
+            </section>
+        </main>
     </div>
 
     <script>
+        let buildProgressTimer = null;
+
+        // --- Theme handling ---
+        (function initTheme() {
+            try {
+                const stored = window.localStorage.getItem("ir_theme");
+                const prefersDark = window.matchMedia &&
+                    window.matchMedia("(prefers-color-scheme: dark)").matches;
+                const initial = stored || (prefersDark ? "dark" : "light");
+                applyTheme(initial);
+            } catch {
+                applyTheme("light");
+            }
+        })();
+
+        function applyTheme(mode) {
+            const body = document.body;
+            const thumb = document.getElementById("toggleThumb");
+            if (!body || !thumb) return;
+            if (mode === "dark") {
+                body.classList.add("theme-dark");
+                body.classList.remove("theme-light");
+                thumb.textContent = "🌙";
+            } else {
+                body.classList.remove("theme-dark");
+                body.classList.add("theme-light");
+                thumb.textContent = "☀️";
+            }
+            try {
+                window.localStorage.setItem("ir_theme", mode);
+            } catch {}
+        }
+
+        document.getElementById("themeToggle").addEventListener("click", function () {
+            const isDark = document.body.classList.contains("theme-dark");
+            applyTheme(isDark ? "light" : "dark");
+        });
+
+        // Submit query on Enter key inside the chat input
+        document.addEventListener("DOMContentLoaded", function () {
+            const input = document.getElementById("queryInput");
+            if (input) {
+                input.addEventListener("keydown", function (event) {
+                    if (event.key === "Enter" && !event.shiftKey) {
+                        event.preventDefault();
+                        askQuestion();
+                    }
+                });
+            }
+        });
+
+        // --- App state helpers for UI ---
+        function updateUploadedCount(count) {
+            const el = document.getElementById("uploadedCount");
+            if (el) el.textContent = String(count);
+        }
+
+        function setKbStatus(text, ok) {
+            const label = document.getElementById("kbStatusLabel");
+            const status = document.getElementById("uploadStatus");
+            if (label) label.textContent = text;
+            if (status) {
+                status.textContent = text;
+                status.classList.remove("status-ok", "status-error");
+                if (ok === true) status.classList.add("status-ok");
+                if (ok === false) status.classList.add("status-error");
+            }
+        }
+
+        function setActiveToolLabel(label) {
+            const tool = document.getElementById("activeToolLabel");
+            if (tool) tool.textContent = label;
+        }
+
+        function escapeHtml(raw) {
+            return raw
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#039;");
+        }
+
+        // --- Backend integration (existing Flask routes) ---
+
+        function renderFileList(files) {
+            const list = document.getElementById("fileList");
+            if (!list) return;
+            if (!files || files.length === 0) {
+                list.innerHTML = "";
+                return;
+            }
+            const names = Array.from(files).map((f) => f.name);
+            list.innerHTML = names
+                .map((name) => `<span class="file-pill" title="${escapeHtml(name)}">${escapeHtml(name)}</span>`)
+                .join("");
+        }
+
+        function updateFileList() {
+            const input = document.getElementById("fileInput");
+            const files = input ? input.files : null;
+            renderFileList(files || []);
+        }
+
+        function handleDragOver(event) {
+            event.preventDefault();
+        }
+
+        function handleDrop(event) {
+            event.preventDefault();
+            const dt = event.dataTransfer;
+            if (!dt || !dt.files || dt.files.length === 0) return;
+            const input = document.getElementById("fileInput");
+            if (input) {
+                input.files = dt.files;
+            }
+            updateFileList();
+        }
+
         // Step 1: Upload files to the 'uploads' folder
         async function uploadFiles() {
-            const files = document.getElementById('fileInput').files;
-            if (files.length === 0) return alert("Please select files first");
+            const input = document.getElementById("fileInput");
+            const files = input ? input.files : null;
+            if (!files || files.length === 0) {
+                alert("Please select files first");
+                return;
+            }
 
             const formData = new FormData();
-            for (let f of files) formData.append('files', f);
-            
-            document.getElementById('uploadStatus').innerText = "Uploading files...";
-            const res = await fetch('/upload', { method: 'POST', body: formData });
-            const data = await res.json();
-            
-            document.getElementById('uploadStatus').innerText = data.message;
-            document.getElementById('uploadStatus').style.color = "#0984e3";
-            document.getElementById('processBtn').disabled = false; // Enable the next step
+            for (const f of files) {
+                formData.append("files", f);
+            }
+
+            const status = document.getElementById("uploadStatus");
+            if (status) {
+                status.textContent = "Uploading files to staging…";
+                status.classList.remove("status-ok", "status-error");
+            }
+
+            try {
+                const res = await fetch("/upload", {
+                    method: "POST",
+                    body: formData
+                });
+                const data = await res.json();
+
+                if (status) {
+                    status.textContent = data.message || "Upload complete.";
+                    status.classList.add("status-ok");
+                }
+
+                const processBtn = document.getElementById("processBtn");
+                if (processBtn) processBtn.disabled = false;
+            } catch (err) {
+                if (status) {
+                    status.textContent = "Upload failed. Please retry.";
+                    status.classList.add("status-error");
+                }
+                console.error("Upload error:", err);
+            }
+        }
+
+        function startBuildProgressAnimation() {
+            const wrapper = document.getElementById("buildProgress");
+            const label = document.getElementById("buildProgressLabel");
+            const fill = document.getElementById("buildProgressFill");
+            if (!wrapper || !label || !fill) return;
+
+            wrapper.style.display = "block";
+            let pct = 0;
+            fill.style.width = "0%";
+            label.textContent = "Building vector database… 0%";
+
+            if (buildProgressTimer) {
+                clearInterval(buildProgressTimer);
+            }
+
+            buildProgressTimer = setInterval(() => {
+                pct = Math.min(pct + 2, 96); // keep under 100 until backend finishes
+                fill.style.width = pct + "%";
+                label.textContent = `Building vector database… ${pct}%`;
+            }, 150);
+        }
+
+        function completeBuildProgressAnimation(successMessage) {
+            const wrapper = document.getElementById("buildProgress");
+            const label = document.getElementById("buildProgressLabel");
+            const fill = document.getElementById("buildProgressFill");
+            const chatHint = document.getElementById("chatHint");
+            const vectorAnim = document.getElementById("vectorAnim");
+
+            if (buildProgressTimer) {
+                clearInterval(buildProgressTimer);
+                buildProgressTimer = null;
+            }
+
+            if (fill) fill.style.width = "100%";
+            if (label) label.textContent = successMessage || "Vector database built — 100%";
+            if (wrapper) wrapper.style.display = "block";
+            if (chatHint) chatHint.style.display = "block";
+            if (vectorAnim) vectorAnim.style.display = "flex";
         }
 
         // Step 2: Trigger the LangChain ingestion/chunking
         async function processDocuments() {
-            document.getElementById('uploadStatus').innerText = "🔨 Building Vector DB... this may take a minute.";
-            const res = await fetch('/process', { method: 'POST' });
-            const data = await res.json();
-            document.getElementById('uploadStatus').innerText = data.message;
-            document.getElementById('uploadStatus').style.color = "#00b894";
+            const status = document.getElementById("uploadStatus");
+            if (status) {
+                status.textContent = "Building vector DB… this may take a minute.";
+                status.classList.remove("status-ok", "status-error");
+            }
+            setKbStatus("Building…", null);
+            startBuildProgressAnimation();
+
+            try {
+                const res = await fetch("/process", { method: "POST" });
+                const data = await res.json();
+
+                const ok = !res || res.ok;
+                const msg = data.message || "Vector DB ready.";
+                setKbStatus(msg, ok);
+                completeBuildProgressAnimation(msg);
+            } catch (err) {
+                setKbStatus("Failed to build knowledge base.", false);
+                if (buildProgressTimer) {
+                    clearInterval(buildProgressTimer);
+                    buildProgressTimer = null;
+                }
+                console.error("Process error:", err);
+            }
         }
 
         // Step 3: Send query to the Agent Dispatcher
         async function askQuestion() {
-            const query = document.getElementById('queryInput').value;
-            if (!query) return alert("Enter a question!");
+            const input = document.getElementById("queryInput");
+            const responseEl = document.getElementById("response");
+            if (!input || !responseEl) return;
 
-            document.getElementById('response').innerText = "🤖 Thinking (Agent Dispatcher Routing)...";
-            const res = await fetch('/ask', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ query })
-            });
-            const data = await res.json();
-            document.getElementById('response').innerText = data.answer;
+            const query = input.value.trim();
+            if (!query) {
+                alert("Enter a question.");
+                return;
+            }
+            // clear the input after capturing the query
+            input.value = "";
+
+            setActiveToolLabel("Routing…");
+            const userBubble = `
+                <div class="chat-message">
+                    <div class="chat-message-user-label">You</div>
+                    <div class="chat-message-user">${escapeHtml(query)}</div>
+                </div>
+            `;
+            const thinkingBubble = `
+                <div class="chat-message">
+                    <div class="chat-message-ai-label">Assistant</div>
+                    <div class="chat-message-ai">🤖 Thinking (Agent Dispatcher routing your query)…</div>
+                </div>
+            `;
+            // Append instead of replacing, to keep history
+            responseEl.innerHTML += userBubble + thinkingBubble;
+            responseEl.scrollTop = responseEl.scrollHeight;
+
+            try {
+                const res = await fetch("/ask", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ query })
+                });
+                const data = await res.json();
+
+                const answer = typeof data.answer === "string" ? data.answer : "(No response returned.)";
+
+                // Prefer markdown rendering when `marked` is available
+                let renderedAnswer;
+                if (window.marked && typeof window.marked.parse === "function") {
+                    renderedAnswer = window.marked.parse(answer);
+                } else {
+                    renderedAnswer = escapeHtml(answer).replace(/\n/g, "<br>");
+                }
+
+                let aiContent = `<div class="markdown-body">${renderedAnswer}</div>`;
+
+                if (Array.isArray(data.citations) && data.citations.length > 0) {
+                    aiContent += `<div style="margin-top:8px;font-size:11px;color:#9ca3af;">Sources & scores</div>`;
+                    aiContent += `<ul style="margin:4px 0 0;padding-left:16px;font-size:11px;">`;
+                    for (const c of data.citations) {
+                        const src = escapeHtml(c.source_file || "unknown");
+                        const loc = c.location ? ` (${escapeHtml(c.location)})` : "";
+                        let scoreLabel = "";
+                        if (typeof c.score === "number") {
+                            scoreLabel = `${c.score.toFixed(1)}%`;
+                        } else if (c.confidence) {
+                            scoreLabel = escapeHtml(String(c.confidence));
+                        } else {
+                            scoreLabel = "n/a";
+                        }
+                        aiContent += `<li><strong>${src}${loc}</strong> — score: ${scoreLabel}</li>`;
+                    }
+                    aiContent += `</ul>`;
+                }
+
+                const chatHtml = `
+                    <div class="chat-message">
+                        <div class="chat-message-ai-label">Assistant</div>
+                        <div class="chat-message-ai">${aiContent}</div>
+                    </div>
+                `;
+
+                // Replace only the last "thinking" message with the final answer:
+                // simplest approach: append new AI answer and keep history.
+                responseEl.innerHTML += chatHtml;
+                responseEl.scrollTop = responseEl.scrollHeight;
+
+                if (typeof data.tool === "string") {
+                    const label =
+                        data.tool === "summary"
+                            ? "SUMMARY tool"
+                            : data.tool === "comparative"
+                            ? "COMPARATIVE tool"
+                            : data.tool === "factual_qa"
+                            ? "QA tool"
+                            : data.tool === "clarification"
+                            ? "Clarification agent"
+                            : "Agent response";
+                    setActiveToolLabel(label);
+                } else {
+                    setActiveToolLabel("Agent response");
+                }
+            } catch (err) {
+                responseEl.textContent = "Error calling backend. Check server logs.";
+                setActiveToolLabel("Error");
+                console.error("Ask error:", err);
+            }
         }
     </script>
 </body>

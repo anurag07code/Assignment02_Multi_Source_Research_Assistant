@@ -34,13 +34,23 @@ def process():
         return jsonify({"message": "Knowledge base created successfully!"})
     return jsonify({"message": "No valid files found."}), 400
 
-@app.route('/ask', methods=['POST'])
+@app.route("/ask", methods=["POST"])
 def ask():
     if not current_db:
-        return jsonify({"answer": "Please process documents first!"})
-    query = request.json.get('query')
-    response = agent_dispatcher(query, current_db)
-    return jsonify({"answer": response})
+        return jsonify(
+            {
+                "tool": "system",
+                "overall_confidence": "low",
+                "answer": "Please upload and process documents to build the knowledge base before asking questions.",
+                "citations": [],
+            }
+        )
+
+    data = request.get_json(silent=True) or {}
+    query = data.get("query", "")
+    result = agent_dispatcher(query, current_db)
+    # agent_dispatcher already returns a JSON-serializable dict
+    return jsonify(result)
 
 if __name__ == '__main__':
     app.run(debug=True)
